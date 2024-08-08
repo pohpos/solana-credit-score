@@ -1,10 +1,10 @@
 mod notifier;
 use {
-    clap::{crate_description, crate_name, crate_version, Arg, Command},
+    clap::{crate_description, crate_name, value_parser, Arg, Command},
     log::*,
     notifier::*,
-    solana_clap_v3_utils::input_validators::{
-        is_parsable, is_url_or_moniker, normalize_to_url_if_moniker,
+    solana_clap_v3_utils::{
+        input_parsers::parse_url_or_moniker, input_validators::normalize_to_url_if_moniker,
     },
     solana_client::nonblocking::rpc_client::RpcClient,
     solana_credit_score::get_validator_status,
@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("url")
                 .value_name("URL")
                 .takes_value(true)
-                .validator(|s| is_url_or_moniker(s))
+                .validator(|s| parse_url_or_moniker(s))
                 .help("JSON RPC URL for the cluster [default: value from configuration file]"),
         )
         .arg(
@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("num")
                 .value_name("N")
                 .takes_value(true)
-                .validator(|s| is_parsable::<usize>(s))
+                .value_parser(value_parser!(usize))
                 .help("Limit output to the top N validators [default: all validators]"),
         )
         .arg(
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("percentile")
                 .value_name("P")
                 .takes_value(true)
-                .validator(|s| is_parsable::<u8>(s))
+                .value_parser(value_parser!(u8))
                 .default_value("0")
                 .help("Limit output to the validators in the Pth percentile [default: all validators]"),
         )
@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .index(1)
                 .value_name("EPOCH")
                 .takes_value(true)
-                .validator(|s| is_parsable::<i64>(s))
+                .value_parser(value_parser!(i64))
                 .help("Epoch to process. Negative values are permitted, e.g. -1 means the previous epoch \
                       [default: the current, incomplete, epoch]"),
         )
@@ -126,10 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .value_of("num")
         .map(|s| s.parse::<usize>().unwrap())
         .unwrap_or(usize::MAX);
-    let max_percentile = matches
-        .value_of("max_percentile")
-        .map(|s| s.parse::<u8>().unwrap())
-        .unwrap();
+    let max_percentile: u8 = *matches.get_one("max_percentile").unwrap();
     let ignore_commission = matches.is_present("ignore_commission");
 
     solana_logger::setup_with_default("warn");
