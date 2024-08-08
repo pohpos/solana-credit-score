@@ -79,6 +79,7 @@ async fn get_epoch_commissions(
 #[derive(Debug)]
 pub struct ValidatorStatus {
     pub epoch: Epoch,
+    pub epoch_progress: u64,
     pub credits: u64,
     pub vote_distance: u64,
     pub delegated_stake: u64,
@@ -177,6 +178,7 @@ pub async fn get_validator_status(
 
     Ok(Some(ValidatorStatus {
         epoch,
+        epoch_progress: epoch_info.slot_index * 100 / epoch_info.slots_in_epoch,
         credits,
         vote_distance,
         delegated_stake,
