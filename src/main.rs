@@ -7,6 +7,7 @@ use {
         is_parsable, is_url_or_moniker, normalize_to_url_if_moniker,
     },
     solana_client::nonblocking::rpc_client::RpcClient,
+    solana_credit_score::get_validator_status,
     solana_sdk::{
         account::from_account,
         commitment_config::CommitmentConfig,
@@ -81,6 +82,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Ignore validator commission")
         )
         .arg(
+            Arg::with_name("identity")
+                .short('k')
+                .long("identity")
+                .value_name("IDENTITY")
+                .global(true)
+                .takes_value(true)
+                .help("Validator identity string"),
+        )
+        .arg(
+            Arg::with_name("reason")
+                .short('r')
+                .long("reason")
+                .value_name("REASON")
+                .global(true)
+                .takes_value(true)
+                .help("Reason for calling the program [hourly, daily, new_epoch]"),
+        )
+        .arg(
             Arg::new("epoch")
                 .index(1)
                 .value_name("EPOCH")
@@ -118,6 +137,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("JSON RPC URL: {}", json_rpc_url);
 
+    let validator_vote_id = matches.value_of("identity");
+
     let rpc_client =
         RpcClient::new_with_commitment(json_rpc_url.clone(), CommitmentConfig::finalized());
 
@@ -133,6 +154,116 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     println!("Epoch {}", epoch);
+
+    if let Some(validator_vote_id) = validator_vote_id {
+        let status = get_validator_status(&rpc_client, validator_vote_id, epoch).await?;
+        println!("result {:?}", status);
+        let status = if let Some(status) = status {
+            status
+        } else {
+            notifier
+                .send(&format!(
+                    "```Alert!! validator not found {}```",
+                    validator_vote_id
+                ))
+                .await;
+            return Ok(());
+        };
+
+        let reason = matches.value_of("reason");
+        if let Some(reason) = reason {
+            match reason {
+                "hourly" => {
+                    if status.is_delinquent || status.skip_rate > 4.0 || status.vote_distance > 32 {
+                        notifier
+                            .send(&format!(
+                                "```Alert!!\n\
+                            \tdelinquent: {}\n\
+                            \tskip_rate: {:.2}\n\
+                            \tvote_distance: {}```",
+                                status.is_delinquent, status.skip_rate, status.vote_distance
+                            ))
+                            .await;
+                    }
+                }
+                "daily" => {
+                    notifier
+                        .send(&format!(
+                            "```Current epoch ({}) status\n\
+                            \tdelinquent: {}\n\
+                            \tskip_rate: {:.2}\n\
+                            \tvote_distance: {}\n\
+                            \tstake: {}\n\
+                            \tleader_slots: {}\n\
+                            \telapsed_slots: {}\n\
+                            \tvote_credits: {}\n\
+                            ```",
+                            epoch,
+                            status.is_delinquent,
+                            status.skip_rate,
+                            status.vote_distance,
+                            status.delegated_stake,
+                            status.leader_slots_count,
+                            status.leader_slots_elapsed,
+                            status.credits
+                        ))
+                        .await;
+                }
+                "new_epoch" => {
+                    let last_epoch_status = get_validator_status(
+                        &rpc_client,
+                        validator_vote_id,
+                        epoch.saturating_sub(1),
+                    )
+                    .await?;
+                    //                    println!("result {:?}", last_epoch_status);
+                    if let Some(last_epoch_status) = last_epoch_status {
+                        notifier
+                            .send(&format!(
+                                "```Last epoch ({}) status\n\
+                            \tdelinquent: {}\n\
+                            \tstake: {}\n\
+                            \tleader_slots: {}\n\
+                            \tvote_credits: {}\n\
+                            \nCurrent epoch ({}) status\n\
+                            \tdelinquent: {}\n\
+                            \tskip_rate: {:.2}\n\
+                            \tvote_distance: {}\n\
+                            \tstake: {}\n\
+                            \tleader_slots: {}\n\
+                            \telapsed_slots: {}\n\
+                            \tvote_credits: {}\n\
+                            ```",
+                                epoch.saturating_sub(1),
+                                last_epoch_status.is_delinquent,
+                                last_epoch_status.delegated_stake,
+                                last_epoch_status.leader_slots_count,
+                                last_epoch_status.credits,
+                                epoch,
+                                status.is_delinquent,
+                                status.skip_rate,
+                                status.vote_distance,
+                                status.delegated_stake,
+                                status.leader_slots_count,
+                                status.leader_slots_elapsed,
+                                status.credits
+                            ))
+                            .await;
+                    } else {
+                        notifier
+                            .send(&format!(
+                                "```Alert!! validator not found {}```",
+                                validator_vote_id
+                            ))
+                            .await;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        return Ok(());
+    }
 
     let inflation = {
         let rpc_inflation_governor = rpc_client.get_inflation_governor().await?;
