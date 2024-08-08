@@ -159,7 +159,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(validator_vote_id) = validator_vote_id {
         let status =
             get_validator_status(&rpc_client, validator_vote_id, &epoch_info, epoch).await?;
-        println!("result {:?}", status);
+        // println!("result {:?}", status);
         let status = if let Some(status) = status {
             status
         } else {
@@ -174,8 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let bandwidth_usage = latitude.get_bandwidth_usage().unwrap_or_default();
 
-        let reason = matches.value_of("reason");
-        if let Some(reason) = reason {
+        let msg = if let Some(reason) = matches.value_of("reason") {
             match reason {
                 "hourly" => {
                     if status.is_delinquent
@@ -184,36 +183,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         || bandwidth_usage.inbound_usage > 70
                         || bandwidth_usage.outbound_usage > 70
                     {
-                        notifier
-                            .send(&format!(
-                                "```Alert!!\n\
+                        format!(
+                            "```Alert!!\n\
                             \tepoch: {}\n\
                             \tepoch_progress: {}%\n\
                             \tdelinquent: {}\n\
                             \tskip_rate: {:.2}\n\
                             \tmissed_blocks: {}\n\
                             \tvote_distance: {}\n\
+                            \nNetwork status\n\
                             \tbandwidth_quota: {} GB\n\
                             \tinbound_usage: {}%\n\
                             \toutbound_usage: {}%\n\
                             ```",
-                                epoch,
-                                status.epoch_progress,
-                                status.is_delinquent,
-                                status.skip_rate,
-                                status.leader_slots_elapsed.saturating_sub(status.blocks_produced),
-                                status.vote_distance,
-                                bandwidth_usage.quota,
-                                bandwidth_usage.inbound_usage,
-                                bandwidth_usage.outbound_usage
-                            ))
-                            .await;
+                            epoch,
+                            status.epoch_progress,
+                            status.is_delinquent,
+                            status.skip_rate,
+                            status
+                                .leader_slots_elapsed
+                                .saturating_sub(status.blocks_produced),
+                            status.vote_distance,
+                            bandwidth_usage.quota,
+                            bandwidth_usage.inbound_usage,
+                            bandwidth_usage.outbound_usage
+                        )
+                    } else {
+                        "".to_string()
                     }
                 }
                 "daily" => {
-                    notifier
-                        .send(&format!(
-                            "```Current epoch ({}) status\n\
+                    format!(
+                        "```Current epoch ({}) status\n\
                             \tepoch_progress: {}%\n\
                             \tdelinquent: {}\n\
                             \tskip_rate: {:.2}\n\
@@ -223,25 +224,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             \tprocessed_leader_slots: {}\n\
                             \tblocks_produced: {}\n\
                             \tvote_credits: {}\n\
+                            \nNetwork status\n\
                             \tbandwidth_quota: {} GB\n\
                             \tinbound_usage: {}%\n\
                             \toutbound_usage: {}%\n\
                             ```",
-                            epoch,
-                            status.epoch_progress,
-                            status.is_delinquent,
-                            status.skip_rate,
-                            status.vote_distance,
-                            status.delegated_stake,
-                            status.leader_slots_count,
-                            status.leader_slots_elapsed,
-                            status.blocks_produced,
-                            status.credits,
-                            bandwidth_usage.quota,
-                            bandwidth_usage.inbound_usage,
-                            bandwidth_usage.outbound_usage
-                        ))
-                        .await;
+                        epoch,
+                        status.epoch_progress,
+                        status.is_delinquent,
+                        status.skip_rate,
+                        status.vote_distance,
+                        status.delegated_stake,
+                        status.leader_slots_count,
+                        status.leader_slots_elapsed,
+                        status.blocks_produced,
+                        status.credits,
+                        bandwidth_usage.quota,
+                        bandwidth_usage.inbound_usage,
+                        bandwidth_usage.outbound_usage
+                    )
                 }
                 "new_epoch" => {
                     let last_epoch_status = get_validator_status(
@@ -251,11 +252,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         epoch.saturating_sub(1),
                     )
                     .await?;
-                    println!("result {:?}", last_epoch_status);
+                    // println!("result {:?}", last_epoch_status);
                     if let Some(last_epoch_status) = last_epoch_status {
-                        notifier
-                            .send(&format!(
-                                "```Last epoch ({}) status\n\
+                        format!(
+                            "```Last epoch ({}) status\n\
                             \tdelinquent: {}\n\
                             \tstake: {}\n\
                             \tskip_rate: {:.2}\n\
@@ -272,43 +272,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             \tprocessed_leader_slots: {}\n\
                             \tblocks_produced: {}\n\
                             \tvote_credits: {}\n\
+                            \nNetwork status\n\
                             \tbandwidth_quota: {} GB\n\
                             \tinbound_usage: {}%\n\
                             \toutbound_usage: {}%\n\
                             ```",
-                                epoch.saturating_sub(1),
-                                last_epoch_status.is_delinquent,
-                                last_epoch_status.delegated_stake,
-                                last_epoch_status.skip_rate,
-                                last_epoch_status.leader_slots_count,
-                                last_epoch_status.blocks_produced,
-                                last_epoch_status.credits,
-                                epoch,
-                                status.epoch_progress,
-                                status.is_delinquent,
-                                status.skip_rate,
-                                status.vote_distance,
-                                status.delegated_stake,
-                                status.leader_slots_count,
-                                status.leader_slots_elapsed,
-                                status.blocks_produced,
-                                status.credits,
-                                bandwidth_usage.quota,
-                                bandwidth_usage.inbound_usage,
-                                bandwidth_usage.outbound_usage
-                            ))
-                            .await;
+                            epoch.saturating_sub(1),
+                            last_epoch_status.is_delinquent,
+                            last_epoch_status.delegated_stake,
+                            last_epoch_status.skip_rate,
+                            last_epoch_status.leader_slots_count,
+                            last_epoch_status.blocks_produced,
+                            last_epoch_status.credits,
+                            epoch,
+                            status.epoch_progress,
+                            status.is_delinquent,
+                            status.skip_rate,
+                            status.vote_distance,
+                            status.delegated_stake,
+                            status.leader_slots_count,
+                            status.leader_slots_elapsed,
+                            status.blocks_produced,
+                            status.credits,
+                            bandwidth_usage.quota,
+                            bandwidth_usage.inbound_usage,
+                            bandwidth_usage.outbound_usage
+                        )
                     } else {
-                        notifier
-                            .send(&format!(
-                                "```Alert!! validator not found {}```",
-                                validator_vote_id
-                            ))
-                            .await;
+                        format!("```Alert!! validator not found {}```", validator_vote_id)
                     }
                 }
-                _ => {}
+                _ => "".to_string(),
             }
+        } else {
+            "".to_string()
+        };
+        println!("{}", msg);
+        if msg.len() != 0 {
+            notifier.send(&msg).await;
         }
 
         return Ok(());
