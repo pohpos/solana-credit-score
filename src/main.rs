@@ -156,7 +156,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Epoch {}", epoch);
 
     if let Some(validator_vote_id) = validator_vote_id {
-        let status = get_validator_status(&rpc_client, validator_vote_id, epoch).await?;
+        let status =
+            get_validator_status(&rpc_client, validator_vote_id, &epoch_info, epoch).await?;
         println!("result {:?}", status);
         let status = if let Some(status) = status {
             status
@@ -174,7 +175,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(reason) = reason {
             match reason {
                 "hourly" => {
-                    if status.is_delinquent || status.skip_rate > 4.0 || status.vote_distance > 32 {
+                    if status.is_delinquent || status.skip_rate > 4.0 || status.vote_distance > 40 {
                         notifier
                             .send(&format!(
                                 "```Alert!!\n\
@@ -213,10 +214,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let last_epoch_status = get_validator_status(
                         &rpc_client,
                         validator_vote_id,
+                        &epoch_info,
                         epoch.saturating_sub(1),
                     )
                     .await?;
-                    //                    println!("result {:?}", last_epoch_status);
+                    println!("result {:?}", last_epoch_status);
                     if let Some(last_epoch_status) = last_epoch_status {
                         notifier
                             .send(&format!(

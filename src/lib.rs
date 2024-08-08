@@ -2,7 +2,10 @@ use {
     log::*,
     solana_client::{
         nonblocking::rpc_client::RpcClient,
-        rpc_config::{RpcBlockConfig, RpcGetVoteAccountsConfig},
+        rpc_config::{
+            RpcBlockConfig, RpcBlockProductionConfig, RpcBlockProductionConfigRange,
+            RpcGetVoteAccountsConfig, RpcLeaderScheduleConfig,
+        },
         rpc_custom_error,
     },
     solana_sdk::{
@@ -75,11 +78,13 @@ async fn get_epoch_commissions(
 
 #[derive(Debug)]
 pub struct ValidatorStatus {
+    pub epoch: Epoch,
     pub credits: u64,
     pub vote_distance: u64,
     pub delegated_stake: u64,
     pub leader_slots_count: usize,
     pub leader_slots_elapsed: usize,
+    pub blocks_produced: usize,
     pub skip_rate: f64,
     pub is_delinquent: bool,
 }
@@ -87,6 +92,7 @@ pub struct ValidatorStatus {
 pub async fn get_validator_status(
     rpc_client: &RpcClient,
     vote_pubkey: &str,
+    epoch_info: &EpochInfo,
     epoch: Epoch,
 ) -> Result<Option<ValidatorStatus>, Box<dyn std::error::Error>> {
     let vote_accounts = rpc_client
@@ -122,8 +128,23 @@ pub async fn get_validator_status(
 
     let identity = &account.node_pubkey;
 
-    let (leader_slots_elapsed, skip_rate) = rpc_client
-        .get_block_production()
+    let first_slot_in_epoch = epoch_info
+        .absolute_slot
+        .saturating_sub(epoch_info.slot_index)
+        - (epoch_info.epoch - epoch) * epoch_info.slots_in_epoch;
+    let last_slot = first_slot_in_epoch
+        .saturating_add(epoch_info.slots_in_epoch)
+        .min(epoch_info.absolute_slot);
+
+    let (leader_slots_elapsed, blocks_produced, skip_rate) = rpc_client
+        .get_block_production_with_config(RpcBlockProductionConfig {
+            identity: Some(identity.clone()),
+            range: Some(RpcBlockProductionConfigRange {
+                first_slot: first_slot_in_epoch,
+                last_slot: Some(last_slot),
+            }),
+            ..RpcBlockProductionConfig::default()
+        })
         .await?
         .value
         .by_identity
@@ -132,12 +153,21 @@ pub async fn get_validator_status(
         .map(|(_, (leader_slots, blocks_produced))| {
             (
                 leader_slots,
+                blocks_produced,
                 100. * (leader_slots.saturating_sub(blocks_produced)) as f64 / leader_slots as f64,
             )
         })
         .unwrap_or_default();
 
-    let leader_schedule = rpc_client.get_leader_schedule(None).await?;
+    let leader_schedule = rpc_client
+        .get_leader_schedule_with_config(
+            Some(first_slot_in_epoch),
+            RpcLeaderScheduleConfig {
+                identity: Some(identity.clone()),
+                commitment: None,
+            },
+        )
+        .await?;
 
     let leader_slots_count = if let Some(schedule) = leader_schedule {
         schedule.get(identity).map(|v| v.len()).unwrap_or_default()
@@ -146,11 +176,13 @@ pub async fn get_validator_status(
     };
 
     Ok(Some(ValidatorStatus {
+        epoch,
         credits,
         vote_distance,
         delegated_stake,
         leader_slots_count,
         leader_slots_elapsed,
+        blocks_produced,
         skip_rate,
         is_delinquent,
     }))
