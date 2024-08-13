@@ -13,7 +13,10 @@ use {
         reward_type::RewardType,
     },
     solana_transaction_status::Reward,
-    std::collections::BTreeMap,
+    std::{
+        collections::BTreeMap,
+        fmt::{Debug, Formatter},
+    },
 };
 
 async fn get_epoch_commissions(
@@ -76,7 +79,6 @@ async fn get_epoch_commissions(
     }
 }
 
-#[derive(Debug)]
 pub struct ValidatorStatus {
     pub epoch: Epoch,
     pub epoch_progress: u64,
@@ -88,6 +90,35 @@ pub struct ValidatorStatus {
     pub blocks_produced: usize,
     pub skip_rate: f64,
     pub is_delinquent: bool,
+}
+
+impl Debug for ValidatorStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "\tEpoch {} is {}% over\n\
+            \tThe node is {}\n\
+            \t{} SOLs are staked\n\
+            \t{} leader slots allocated\n\
+            \t{} blocks out of {}\n\
+            \tskip rate is {:.2}%\n\
+            \tVote distance {}\n\
+            \tVote credits {}\n",
+            self.epoch,
+            self.epoch_progress,
+            self.is_delinquent
+                .then_some("!! delinquent !!")
+                .or_else(|| Some("not delinquent"))
+                .unwrap(),
+            self.delegated_stake,
+            self.leader_slots_count,
+            self.blocks_produced,
+            self.leader_slots_elapsed,
+            self.skip_rate,
+            self.vote_distance,
+            self.credits,
+        )
+    }
 }
 
 pub async fn get_validator_status(
@@ -176,9 +207,15 @@ pub async fn get_validator_status(
         0
     };
 
+    let epoch_progress = if epoch_info.epoch > epoch {
+        100
+    } else {
+        epoch_info.slot_index * 100 / epoch_info.slots_in_epoch
+    };
+
     Ok(Some(ValidatorStatus {
         epoch,
-        epoch_progress: epoch_info.slot_index * 100 / epoch_info.slots_in_epoch,
+        epoch_progress,
         credits,
         vote_distance,
         delegated_stake,
