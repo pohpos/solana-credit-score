@@ -33,7 +33,7 @@ impl Debug for BandwidthUsage {
         write!(
             f,
             "\tquota: {} GB\n\
-            \tin | out usage: {}% | {}%\n\
+            \tusage: {}% in | {} out%\n\
             \ttime: {} days | {}% month\n",
             self.quota,
             self.inbound_usage,

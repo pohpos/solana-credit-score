@@ -99,11 +99,11 @@ impl Debug for ValidatorStatus {
             "\tEpoch {} is {}% over\n\
             \tThe node is {}\n\
             \t{} SOLs are staked\n\
-            \t{} leader slots allocated\n\
-            \t{} blocks out of {}\n\
-            \tskip rate is {:.2}%\n\
-            \tVote distance {}\n\
-            \tVote credits {}\n",
+            \t{} total leader slots\n\
+            \t{} produced out of {}\n\
+            \t{:.2}% skip rate\n\
+            \t{} vote distance\n\
+            \t{} vote credits\n",
             self.epoch,
             self.epoch_progress,
             self.is_delinquent
